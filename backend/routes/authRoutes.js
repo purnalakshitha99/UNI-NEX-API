@@ -12,6 +12,7 @@ import {
   updateUserProfile,
   viewUserProfile,
   verifyEmail,
+  resendVerificationEmail,
   getAllUsers,
   deleteUser
 } from "../controllers/authController.js";
@@ -26,6 +27,7 @@ router.post("/login", loginUser);
 
 // Email verification route
 router.get("/verify-email/:token", verifyEmail);
+router.post("/resend-verification", resendVerificationEmail);
 
 //get all students - admin
 router.get("/students", requiredSignIn, isAdmin, getAllStudents);

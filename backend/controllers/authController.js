@@ -3,6 +3,11 @@ import generateToken from "../utils/generateToken.js";
 import crypto from "crypto";
 import sendEmail from "../utils/sendEmail.js";
 
+const buildVerificationUrl = (token) => {
+  const frontendHost = process.env.FRONTEND_URL || "http://localhost:3000";
+  return `${frontendHost}/verify-email/${token}`;
+};
+
 // REGISTER
 export const registerUser = async (req, res) => {
   try {
@@ -93,18 +98,24 @@ export const registerUser = async (req, res) => {
     const user = await User.create(userData);
 
     // Prepare verification URL using environment variable
-    const frontendHost = process.env.FRONTEND_URL || `http://localhost:3000`;
-    const verificationUrl = `${frontendHost}/verify-email/${verificationToken}`;
+    const verificationUrl = buildVerificationUrl(verificationToken);
 
-    // Send verification email (don't wait for it - send async)
-    sendEmail({
-      to: user.email,
-      subject: "Verify Your Email",
-      text: `Hi ${user.firstName}, please verify your email by clicking this link: ${verificationUrl}`,
-      html: `<p>Hi ${user.firstName},</p>
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "Verify Your Email",
+        text: `Hi ${user.firstName}, please verify your email by clicking this link: ${verificationUrl}`,
+        html: `<p>Hi ${user.firstName},</p>
              <p>Please verify your email by clicking the link below:</p>
              <a href="${verificationUrl}">Verify Email</a>`,
-    }).catch(err => console.error("Email sending failed:", err));
+      });
+    } catch (emailError) {
+      console.error("Verification email sending failed:", emailError);
+      return res.status(500).json({
+        success: false,
+        message: "Account created, but verification email sending failed. Please use resend verification.",
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -388,5 +399,53 @@ export const verifyEmail = async (req, res) => {
     console.error("Email Verification Error:", error);
     const frontendHost = process.env.FRONTEND_URL || `http://localhost:3000`;
     res.redirect(`${frontendHost}/verify-error?message=Server error during verification`);
+  }
+};
+
+// resend verification email
+export const resendVerificationEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ success: false, message: "Email is already verified" });
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    user.verificationToken = verificationToken;
+    await user.save();
+
+    const verificationUrl = buildVerificationUrl(verificationToken);
+
+    await sendEmail({
+      to: user.email,
+      subject: "Resend: Verify Your Email",
+      text: `Hi ${user.firstName}, please verify your email by clicking this link: ${verificationUrl}`,
+      html: `<p>Hi ${user.firstName},</p>
+             <p>Please verify your email by clicking the link below:</p>
+             <a href="${verificationUrl}">Verify Email</a>`,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Verification email resent successfully",
+    });
+  } catch (error) {
+    console.error("Resend Verification Email Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to resend verification email",
+      error: error.message,
+    });
   }
 };
