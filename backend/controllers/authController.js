@@ -96,16 +96,15 @@ export const registerUser = async (req, res) => {
     const frontendHost = process.env.FRONTEND_URL || `http://localhost:3000`;
     const verificationUrl = `${frontendHost}/verify-email/${verificationToken}`;
 
-
-    // Send verification email
-    await sendEmail({
+    // Send verification email (don't wait for it - send async)
+    sendEmail({
       to: user.email,
       subject: "Verify Your Email",
       text: `Hi ${user.firstName}, please verify your email by clicking this link: ${verificationUrl}`,
       html: `<p>Hi ${user.firstName},</p>
              <p>Please verify your email by clicking the link below:</p>
              <a href="${verificationUrl}">Verify Email</a>`,
-    });
+    }).catch(err => console.error("Email sending failed:", err));
 
     res.status(201).json({
       success: true,
@@ -370,8 +369,8 @@ export const verifyEmail = async (req, res) => {
     user.verificationToken = undefined; // remove token
     await user.save();
 
-    // Send welcome email with login credentials
-    await sendEmail({
+    // Send welcome email (don't wait for it - send async)
+    sendEmail({
       to: user.email,
       subject: "Welcome to UNI NEX - Account Verified",
       text: `Hi ${user.firstName},\n\nYour email has been verified successfully!\n\nYou can now log in to your account using your email and password.\n\nLogin URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/login\n\nThank you for joining UNI NEX!`,
@@ -380,7 +379,7 @@ export const verifyEmail = async (req, res) => {
              <p>You can now log in to your account using your email and password.</p>
              <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">Click here to log in</a></p>
              <p>Thank you for joining UNI NEX!</p>`,
-    });
+    }).catch(err => console.error("Welcome email sending failed:", err));
 
     // Redirect to frontend success page
     const frontendHost = process.env.FRONTEND_URL || `http://localhost:3000`;
