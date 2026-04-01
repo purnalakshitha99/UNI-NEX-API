@@ -92,10 +92,9 @@ export const registerUser = async (req, res) => {
 
     const user = await User.create(userData);
 
-    // Prepare verification URL
-    //const verificationUrl = `${req.protocol}://${req.get("host")}/api/v1/auth/verify-email/${verificationToken}`;
-
-    const verificationUrl = `http://localhost:3000/verify-email/${verificationToken}`;
+    // Prepare verification URL using environment variable
+    const frontendHost = process.env.FRONTEND_URL || `http://localhost:3000`;
+    const verificationUrl = `${frontendHost}/verify-email/${verificationToken}`;
 
 
     // Send verification email
@@ -363,16 +362,32 @@ export const verifyEmail = async (req, res) => {
     const user = await User.findOne({ verificationToken: token });
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid or expired verification token" });
+      const frontendHost = process.env.FRONTEND_URL || `http://localhost:3000`;
+      return res.redirect(`${frontendHost}/verify-error?message=Invalid or expired verification token`);
     }
 
     user.isVerified = true;
     user.verificationToken = undefined; // remove token
     await user.save();
 
-    res.status(200).json({ success: true, message: "Email verified successfully!" });
+    // Send welcome email with login credentials
+    await sendEmail({
+      to: user.email,
+      subject: "Welcome to UNI NEX - Account Verified",
+      text: `Hi ${user.firstName},\n\nYour email has been verified successfully!\n\nYou can now log in to your account using your email and password.\n\nLogin URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/login\n\nThank you for joining UNI NEX!`,
+      html: `<p>Hi ${user.firstName},</p>
+             <p>Your email has been verified successfully!</p>
+             <p>You can now log in to your account using your email and password.</p>
+             <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/login">Click here to log in</a></p>
+             <p>Thank you for joining UNI NEX!</p>`,
+    });
+
+    // Redirect to frontend success page
+    const frontendHost = process.env.FRONTEND_URL || `http://localhost:3000`;
+    res.redirect(`${frontendHost}/verify-success`);
   } catch (error) {
     console.error("Email Verification Error:", error);
-    res.status(500).json({ message: "Server error" });
+    const frontendHost = process.env.FRONTEND_URL || `http://localhost:3000`;
+    res.redirect(`${frontendHost}/verify-error?message=Server error during verification`);
   }
 };
