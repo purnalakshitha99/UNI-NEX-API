@@ -15,10 +15,26 @@ connectDB();
 
 const app = express();
 
-// CORS Configuration
+// CORS Configuration - Allow multiple origins for testing and production
+const allowedOrigins = [
+  "http://localhost:3000",           // Local development
+  "http://localhost:5000",           // Local backend
+  "https://uni-nex-front-end.onrender.com",  // Production frontend
+  process.env.FRONTEND_URL,          // From environment variable
+];
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(new Error("CORS not allowed for this origin"));
+    }
+  },
   credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 // Middleware
