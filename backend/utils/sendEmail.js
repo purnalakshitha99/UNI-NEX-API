@@ -2,17 +2,27 @@ import nodemailer from "nodemailer";
 
 const sendEmail = async ({ to, subject, text, html }) => {
   try {
-    
+    const emailUser = process.env.EMAIL_USER;
+    // Gmail app passwords are often copied with spaces; normalize to avoid auth failures.
+    const emailPass = (process.env.EMAIL_PASS || "").replace(/\s+/g, "");
+
+    if (!emailUser || !emailPass) {
+      throw new Error("EMAIL_USER or EMAIL_PASS is not configured");
+    }
+
     const transporter = nodemailer.createTransport({
-      service: "Gmail", 
+      service: "Gmail",
       auth: {
-        user: process.env.EMAIL_USER, 
-        pass: process.env.EMAIL_PASS, 
+        user: emailUser,
+        pass: emailPass,
       },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
     });
 
     const message = {
-      from: process.env.EMAIL_USER,
+      from: emailUser,
       to,
       subject,
       text,
