@@ -22,8 +22,18 @@ const parseJsonIfNeeded = (value, fallback) => {
 const parseQrPayload = (qrContent) => {
   if (!qrContent || typeof qrContent !== "string") return null;
 
+  const normalized = qrContent.trim();
+
   try {
-    const parsed = JSON.parse(qrContent);
+    const parsed = JSON.parse(normalized);
+    return typeof parsed === "object" ? parsed : null;
+  } catch {
+    // continue to URI-decoding fallback
+  }
+
+  try {
+    const decoded = decodeURIComponent(normalized);
+    const parsed = JSON.parse(decoded);
     return typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
@@ -683,17 +693,54 @@ export const markAttendanceByQr = async (req, res) => {
 
     const parsed = parseQrPayload(qrContent);
 
-    if (!parsed?.ticketCode) {
+    const normalizedTicketCode = String(
+      parsed?.ticketCode || parsed?.ticket_code || parsed?.ticketId || ""
+    ).trim();
+    const normalizedTransactionId = String(
+      parsed?.transactionId || parsed?.transaction_id || ""
+    ).trim();
+
+    if (!normalizedTicketCode && !normalizedTransactionId) {
       return res.status(400).json({
         success: false,
         message: "Invalid QR payload",
       });
     }
 
-    const registration = await EventRegistration.findOne({ ticketCode: parsed.ticketCode })
+    let registration = null;
+
+    if (normalizedTicketCode) {
+      registration = await EventRegistration.findOne({ ticketCode: normalizedTicketCode });
+
+      if (!registration) {
+        registration = await EventRegistration.findOne({
+          ticketCode: {
+            $regex: `^${normalizedTicketCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+            $options: "i",
+          },
+        });
+      }
+    }
+
+    if (!registration && normalizedTransactionId) {
+      registration = await EventRegistration.findOne({ transactionId: normalizedTransactionId });
+
+      if (!registration) {
+        registration = await EventRegistration.findOne({
+          transactionId: {
+            $regex: `^${normalizedTransactionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+            $options: "i",
+          },
+        });
+      }
+    }
+
+    if (registration) {
+      registration = await EventRegistration.findById(registration._id)
       .populate("event", "title startDate startTime venue isOnline")
       .populate("student", "firstName lastName email studentId faculty phone")
       .populate("attendanceMarkedBy", "firstName lastName");
+    }
 
     if (!registration) {
       return res.status(404).json({
@@ -706,6 +753,8 @@ export const markAttendanceByQr = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "This ticket does not belong to the selected event",
+        belongsToEventId: registration.event?._id,
+        belongsToEventTitle: registration.event?.title || "",
       });
     }
 
@@ -737,7 +786,7 @@ export const markAttendanceByQr = async (req, res) => {
       return res.status(409).json({
         success: false,
         alreadyMarked: true,
-        message: "This QR has already been used for attendance",
+        message: "Already scanned for this event",
         registration,
       });
     }
